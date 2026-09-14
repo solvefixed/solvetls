@@ -95,8 +95,9 @@ jobs:
             --publish 127.0.0.1:443:443 \
             --mount "type=bind,source=$smoke_certs,target=/app/certs,readonly" \
             solvetls:ci
+          # Docker can accept TCP before the TLS listener is ready.
           curl --http1.1 --fail --show-error --silent \
-            --retry 30 --retry-connrefused --retry-delay 1 --max-time 5 \
+            --retry 30 --retry-all-errors --retry-delay 1 --max-time 5 \
             --cacert "$smoke_certs/fullchain.pem" \
             https://localhost/ --output "$RUNNER_TEMP/solvetls-response.json"
           python - "$RUNNER_TEMP/solvetls-response.json" <<'PY'

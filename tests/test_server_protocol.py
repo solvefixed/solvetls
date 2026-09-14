@@ -194,16 +194,27 @@ class ServerProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any(f["type"] == 7 for f in result["frames"]))
 
     async def test_disjoint_alpn_fails_tls(self):
+        outbound = bytearray()
+
+        class RecordingWriter(MemoryWriter):
+            def write(self, data):
+                outbound.extend(data)
+                super().write(data)
+
         for version in (ssl.TLSVersion.TLSv1_2, ssl.TLSVersion.TLSv1_3):
-            with (
-                self.subTest(version=version),
-                self.assertRaisesRegex(ssl.SSLError, "(?i)no application protocol"),
-            ):
-                await exchange(
-                    b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n",
-                    ("unsupported",),
-                    tls_version=version,
-                )
+            with self.subTest(version=version):
+                outbound.clear()
+                with (
+                    patch("tests.support.MemoryWriter", RecordingWriter),
+                    self.assertRaises(ssl.SSLError),
+                ):
+                    await exchange(
+                        b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n",
+                        ("unsupported",),
+                        tls_version=version,
+                    )
+                # OpenSSL error text varies; check the fatal alert's wire code.
+                self.assertEqual(outbound, b"\x15\x03\x03\x00\x02\x02\x78")
 
     async def test_favicon_204_has_no_content_length(self):
         result = await exchange(b"GET /favicon.ico HTTP/1.1\r\nHost: localhost\r\n\r\n")
