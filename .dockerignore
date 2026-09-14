@@ -1,0 +1,16 @@
+certs/
+Dockerfile
+docker-compose.yml
+docker-compose.override.yml
+docker-compose.override.yaml
+.git/
+.gitignore
+**/__pycache__/
+**/*.py[cod]
+.venv/
+venv/
+.ruff_cache/
+.env
+.env.*
+.github/
+tests/

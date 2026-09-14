@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            requirements*.txt
+            constraints.txt
+      - run: python -m pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            constraints.txt
+      - run: python -m pip install -r requirements.txt
+      - run: python -m pip check
+      - run: python -m unittest discover -v
+        env:
+          SOLVETLS_NETWORK_TESTS: '1'
+
+  mongodb:
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'quit(db.adminCommand({ping:1}).ok ? 0 : 1)'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            constraints.txt
+      - run: python -m pip install -r requirements.txt
+      - run: python -m unittest tests.test_storage_integration -v
+        env:
+          SOLVETLS_MONGODB_TESTS: '1'
+          SOLVETLS_MONGODB_TEST_URL: mongodb://127.0.0.1:27017
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker compose config --quiet
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: docker build --tag solvetls:ci .
+      - name: Serve HTTP redirects and HTTPS with an owner-only host key
+        shell: bash
+        run: |
+          smoke_certs="$(mktemp -d)"
+          umask 077
+          openssl req -x509 -newkey rsa:2048 -sha256 -days 1 -nodes \
+            -keyout "$smoke_certs/privkey.pem" -out "$smoke_certs/fullchain.pem" \
+            -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+          test "$(stat -c '%a' "$smoke_certs/privkey.pem")" = 600
+          docker run --detach --name solvetls-smoke \
+            --publish 127.0.0.1:80:80 \
+            --publish 127.0.0.1:443:443 \
+            --mount "type=bind,source=$smoke_certs,target=/app/certs,readonly" \
+            solvetls:ci
+          curl --http1.1 --fail --show-error --silent \
+            --retry 30 --retry-connrefused --retry-delay 1 --max-time 5 \
+            --cacert "$smoke_certs/fullchain.pem" \
+            https://localhost/ --output "$RUNNER_TEMP/solvetls-response.json"
+          python - "$RUNNER_TEMP/solvetls-response.json" <<'PY'
+          import http.client
+          import json
+          import sys
+
+          connection = http.client.HTTPConnection("localhost", 80, timeout=5)
+          try:
+              path = "/redirect%2Fcheck?one=two&empty="
+              connection.request("GET", path)
+              response = connection.getresponse()
+              assert response.status == 308, response.status
+              assert response.getheader("Location") == f"https://localhost{path}"
+              assert response.read() == b""
+          finally:
+              connection.close()
+
+          with open(sys.argv[1], encoding="utf-8") as response:
+              report = json.load(response)
+          assert report["http_version"] == "HTTP/1.1", report
+          assert report["method"] == "GET", report
+          assert report["tls"]["ja3_hash"], report
+          assert report["tls"]["ja4"], report
+          assert report["http1"]["raw_head"], report
+          PY
+      - name: Show container logs and clean up
+        if: always()
+        run: |
+          docker logs solvetls-smoke || true
+          docker rm --force solvetls-smoke || true

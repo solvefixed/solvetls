@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ruff_cache/
+/certs/
+.env
+.env.*
+!.env.example
+/docker-compose.override.yml
+/docker-compose.override.yaml

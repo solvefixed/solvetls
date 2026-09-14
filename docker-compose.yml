@@ -1,0 +1,12 @@
+services:
+  solvetls:
+    build: .
+    restart: unless-stopped
+    stop_grace_period: 15s
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      - SOLVETLS_LOG_LEVEL=INFO
+    volumes:
+      - ./certs:/app/certs:ro

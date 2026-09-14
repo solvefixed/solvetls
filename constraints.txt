@@ -1,0 +1,9 @@
+annotated-types==0.7.0
+click==8.3.3
+colorama==0.4.6
+dnspython==2.8.0
+hyperframe==6.1.0
+lazy-model==0.4.0
+pydantic-core==2.41.5
+typing-extensions==4.15.0
+typing-inspection==0.4.2

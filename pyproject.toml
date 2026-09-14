@@ -1,0 +1,30 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.format]
+line-ending = "lf"
+
+[tool.ruff.lint]
+select = [
+  "E",     # pycodestyle
+  "W",
+  "F",     # pyflakes
+  "I",     # import order
+  "N",     # naming
+  "UP",    # py312 idioms over typing.Optional and friends
+  "B",     # bugbear
+  "A",     # shadowed builtins
+  "C4",    # comprehensions
+  "SIM",   # simplifications
+  "RET",   # returns
+  "ARG",   # unused arguments
+  "PIE",
+  "PERF",
+  "S",     # bandit
+  "ASYNC", # async correctness checks
+  "LOG",   # logger misuse
+  "G",     # lazy % formatting in log calls, not f-strings
+  "T20",   # stray print()
+  "RUF",
+]

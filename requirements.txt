@@ -1,0 +1,6 @@
+-c constraints.txt
+beanie==2.2.0
+h2==4.4.1
+hpack==4.2.0
+pydantic==2.12.5
+pymongo==4.15.5
